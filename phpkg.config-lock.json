@@ -1,0 +1,28 @@
+{
+    "packages": {
+        "https:\/\/github.com\/ramsey\/uuid.git": {
+            "owner": "ramsey",
+            "repo": "uuid",
+            "version": "4.7.6",
+            "hash": "91039bc1faa45ba123c4328958e620d382ec7088"
+        },
+        "https:\/\/github.com\/brick\/math.git": {
+            "owner": "brick",
+            "repo": "math",
+            "version": "0.13.1",
+            "hash": "fc7ed316430118cc7836bf45faff18d5dfc8de04"
+        },
+        "https:\/\/github.com\/ramsey\/collection.git": {
+            "owner": "ramsey",
+            "repo": "collection",
+            "version": "2.1.1",
+            "hash": "344572933ad0181accbf4ba763e85a0306a8c5e2"
+        },
+        "https:\/\/github.com\/php-repos\/datatype.git": {
+            "owner": "php-repos",
+            "repo": "datatype",
+            "version": "development",
+            "hash": "518bd28b765a4ddbb23ed3ab51b2c522ddc68dcc"
+        }
+    }
+}

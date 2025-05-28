@@ -1,0 +1,18 @@
+{
+    "map": {
+        "PhpRepos\\Observer": "Source"
+    },
+    "autoloads": [],
+    "excludes": [],
+    "entry-points": [],
+    "executables": [],
+    "import-file": "phpkg.imports.php",
+    "packages-directory": "Packages",
+    "packages": {
+        "https:\/\/github.com\/ramsey\/uuid.git": "4.7.6",
+        "https:\/\/github.com\/php-repos\/datatype.git": "development"
+    },
+    "aliases": {
+        "datatype": "https:\/\/github.com\/php-repos\/datatype.git"
+    }
+}

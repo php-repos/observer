@@ -1,0 +1,48 @@
+name: run-tests
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        php: [8.2, 8.3, 8.4]
+
+    name: P${{ matrix.php }} - ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, mbstring, zip
+          coverage: none
+
+      - name: Install phpkg
+        run: bash -c "$(curl -fsSL https://raw.github.com/php-repos/phpkg-installation/master/install.sh)"
+
+      - name: Set Credentials
+        run: ~/.phpkg/phpkg credential github.com ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install
+        run: ~/.phpkg/phpkg install
+
+      - name: Build
+        run: ~/.phpkg/phpkg build production
+
+      - name: Execute tests
+        run: |
+          cd builds/production
+          ~/.phpkg/phpkg run https://github.com/php-repos/test-runner.git
