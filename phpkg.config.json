@@ -10,7 +10,7 @@
     "packages-directory": "Packages",
     "packages": {
         "https:\/\/github.com\/ramsey\/uuid.git": "4.7.6",
-        "https:\/\/github.com\/php-repos\/datatype.git": "development"
+        "https:\/\/github.com\/php-repos\/datatype.git": "v4.0.0"
     },
     "aliases": {
         "datatype": "https:\/\/github.com\/php-repos\/datatype.git"

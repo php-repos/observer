@@ -21,8 +21,8 @@
         "https:\/\/github.com\/php-repos\/datatype.git": {
             "owner": "php-repos",
             "repo": "datatype",
-            "version": "development",
-            "hash": "518bd28b765a4ddbb23ed3ab51b2c522ddc68dcc"
+            "version": "v4.0.0",
+            "hash": "d29dc1c67d83217b20768a74a973f1b5fc4513ea"
         }
     }
 }
