@@ -3,8 +3,6 @@
 namespace PhpRepos\Observer\Observer;
 
 use Exception;
-use PhpRepos\Datatype\Collection;
-use PhpRepos\Datatype\Set;
 use PhpRepos\Observer\Attributes\SignalType;
 use PhpRepos\Observer\Exceptions\ObserverException;
 use PhpRepos\Observer\Registry;
@@ -22,11 +20,12 @@ use ReflectionFunction;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
 use ReflectionUnionType;
-use function PhpRepos\Datatype\Arr\any;
-use function PhpRepos\Datatype\Arr\cartesian_product;
-use function PhpRepos\Datatype\Arr\map;
-use function PhpRepos\Datatype\Arr\merge;
-use function PhpRepos\Datatype\Arr\reduce;
+use function PhpRepos\Observer\Infra\Arrays\any;
+use function PhpRepos\Observer\Infra\Arrays\cartesian_product;
+use function PhpRepos\Observer\Infra\Arrays\map;
+use function PhpRepos\Observer\Infra\Arrays\merge;
+use function PhpRepos\Observer\Infra\Arrays\reduce;
+use function PhpRepos\Observer\Infra\Arrays\unique;
 
 /**
  * Registers handlers to listen for specific signals in the observer system.
@@ -116,17 +115,17 @@ function send(Signal ...$signals): array
         return [];
     }
 
-    $signals = Set::from($signals);
+    $signals = unique($signals);
 
-    $results = new Collection();
+    $results = [];
 
-    if ($signals->count() > 1) {
-        $results = reduce($signals, fn (Collection $carry, Signal $signal) => $carry->merge(send($signal)), $results);
+    if (count($signals) > 1) {
+        $results = reduce($signals, fn (array $carry, Signal $signal) => merge($carry, send($signal)), $results);
     }
 
     $is_internal_signal = any($signals, fn (Signal $signal) => $signal instanceof HandlerExecution || $signal instanceof HandlerFound || $signal instanceof NoHandlerFound);
 
-    $possible_listeners = Registry::get($signals->count());
+    $possible_listeners = Registry::get(count($signals));
 
     $handler_found = false;
 
@@ -138,7 +137,7 @@ function send(Signal ...$signals): array
         $is_match = true;
 
         foreach ($conditions as $index => $condition) {
-            if ($index >= $signals->count()) {
+            if ($index >= count($signals)) {
                 if ($condition['optional'] && $condition['default_is_available']) {
                     $args[] = $condition['default_value'];
                     continue;
@@ -170,16 +169,16 @@ function send(Signal ...$signals): array
             $handler_found = true;
 
             if (!$is_internal_signal) {
-                send(HandlerExecution::create('Handler Execution Planned', ['id' => $signals->count() . '-' . $listener_index, 'signal_types' => map($signals, fn (Signal $signal) => get_class($signal))]));
+                send(HandlerExecution::create('Handler Execution Planned', ['id' => count($signals) . '-' . $listener_index, 'signal_types' => map($signals, fn (Signal $signal) => get_class($signal))]));
             }
 
             $result = $handler(...$args);
             if ($result instanceof Signal) {
-                $results->push($result);
+                $results[] = $result;
             }
 
             if (!$is_internal_signal) {
-                send(HandlerFound::create('Handler Found', ['id' => $signals->count() . '-' . $listener_index, 'signal_types' => map($signals, fn (Signal $signal) => get_class($signal))]));
+                send(HandlerFound::create('Handler Found', ['id' => count($signals) . '-' . $listener_index, 'signal_types' => map($signals, fn (Signal $signal) => get_class($signal))]));
             }
         }
     }
@@ -188,7 +187,7 @@ function send(Signal ...$signals): array
         send(NoHandlerFound::create('No Handler Found', ['signal_types' => map($signals, fn (Signal $signal) => get_class($signal))]));
     }
 
-    return $results->to_array();
+    return $results;
 }
 
 /**
