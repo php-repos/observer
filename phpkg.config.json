@@ -9,7 +9,8 @@
     "packages-directory": "Packages",
     "import-file": "phpkg.imports.php",
     "packages": {
-        "https:\/\/github.com\/ramsey\/uuid.git": "4.7.6"
+        "https:\/\/github.com\/ramsey\/uuid.git": "4.7.6",
+        "https:\/\/github.com\/php-repos\/logger.git": "v2.0.0"
     },
     "aliases": []
 }

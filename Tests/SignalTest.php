@@ -1,6 +1,6 @@
 <?php
 
-use PhpRepos\Observer\Signals\Signal;
+use PhpRepos\Observer\API\Signal;
 use function PhpRepos\TestRunner\Assertions\assert_false;
 use function PhpRepos\TestRunner\Assertions\assert_true;
 use function PhpRepos\TestRunner\Runner\test;

@@ -1,7 +1,14 @@
 {
     "version": 2,
-    "checksum": "ff82e9305143ed3b6c9db84d95718e326409fb821fed80b967e5398fd13122a4",
+    "checksum": "5c790b1eba1b81b92288098eb5c2dddfd350176f51d446547c29dec06e0db76a",
     "packages": {
+        "https:\/\/github.com\/php-repos\/logger.git": {
+            "owner": "php-repos",
+            "repo": "logger",
+            "version": "v2.0.0",
+            "hash": "057576d4f4d8de269cc2083b7fb656d17ac9bf0a",
+            "checksum": "df8a0939415b5fa87cf6bd4c8b0c7019c9dfb83aa36f603d727f5dfa139270cb"
+        },
         "https:\/\/github.com\/ramsey\/uuid.git": {
             "owner": "ramsey",
             "repo": "uuid",

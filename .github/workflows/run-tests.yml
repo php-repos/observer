@@ -2,7 +2,7 @@ name: run-tests
 
 on:
   schedule:
-    - cron: "0 1 * * *"
+    - cron: "0 2 * * *"
   push:
     branches: [master]
   pull_request:
@@ -88,54 +88,25 @@ jobs:
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
           phpkg install
 
-      - name: Build current phpkg (Unix)
+      - name: Build (Unix)
         if: runner.os != 'Windows'
-        run: |
-          phpkg build
-          rm -fR Packages
-          mv build current
-          cd current
-          ./phpkg credential github.com ${{ secrets.PHPKG_GITHUB_TOKEN }}
-          ./phpkg install --project=../
-          ./phpkg build --project=../
+        run: phpkg build
 
-      - name: Build current phpkg (Windows)
+      - name: Build (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
           phpkg build
-          Remove-Item -Path "Packages" -Recurse -Force
-          Move-Item -Path "build" -Destination "current"
-          cd current
-          php ./phpkg credential github.com ${{ secrets.PHPKG_GITHUB_TOKEN }}
-          php ./phpkg install --project=../
-          php ./phpkg build --project=../
-
-      - name: Set Credentials (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          cd build
-          ./phpkg credential github.com ${{ secrets.PHPKG_GITHUB_TOKEN }} --force
-
-      - name: Set Credentials (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          cd build
-          php ./phpkg credential github.com ${{ secrets.PHPKG_GITHUB_TOKEN }} --force
 
       - name: Execute tests (Unix)
         if: runner.os != 'Windows'
-        run: |
-          cd build
-          ./phpkg flush
-          ./phpkg run test-runner
+        run: cd build && phpkg run test-runner run
 
       - name: Execute tests (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
           cd build
-          php ./phpkg flush
-          php ./phpkg run test-runner
+          phpkg run test-runner run

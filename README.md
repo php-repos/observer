@@ -1,555 +1,516 @@
-# Observer Package Documentation
+# Observer Package
 
-The **Observer** package provides a robust implementation of the observer pattern in PHP, enabling developers to create event-driven systems where signals (events, plans, inquiries, messages, or commands) can be broadcasted to registered handlers. This package is designed for flexibility, supporting various signal types, handler parameter configurations, and internal signals for observability.
+A message-passing system for connecting autonomous modules in PHP applications. Designed for **architectural integration at boot time**, not ad-hoc event handling.
 
-## Table of Contents
-
-- [Installation](#installation)
-- [Core Concepts](#core-concepts)
-  - [Signals](#signals)
-  - [Handlers](#handlers)
-  - [Internal Signals](#internal-signals)
-- [Usage](#usage)
-  - [Registering Handlers with `subscribe`](#registering-handlers-with-subscribe)
-  - [Broadcasting Signals with `send`](#broadcasting-signals-with-send)
-  - [Signal-Specific Functions](#signal-specific-functions)
-- [Advanced Features](#advanced-features)
-  - [Union and Intersection Types](#union-and-intersection-types)
-  - [Nullable Parameters and Default Values](#nullable-parameters-and-default-values)
-  - [Custom Signal Types with `SignalType` Attribute](#custom-signal-types-with-signaltype-attribute)
-- [Error Handling in Handlers](#error-handling-in-handlers)
-- [Order of Multi-Signal Broadcasting](#order-of-multi-signal-broadcasting)
-- [Logging Signals (Including Internal Signals)](#logging-signals-including-internal-signals)
-- [Full Example](#full-example)
+[![Tests](https://github.com/php-repos/observer/workflows/tests/badge.svg)](https://github.com/php-repos/observer/actions)
 
 ## Installation
 
-To use the **Observer** package in your project, install it via **phpkg**:
-
 ```bash
-phpkg add https://github.com/php-repos/observer.git
+phpkg add observer
 ```
 
-## Core Concepts
+**Requirements**: PHP 8.3+, phpkg
 
-### Signals
+---
 
-Signals are the core entities in the observer system, representing events, plans, inquiries, messages, or commands. All signals extend the `PhpRepos\Observer\Signals\Signal` class, which provides:
+## Quick Start (5 Minutes)
 
-- **Properties** (all `public readonly`):
-  - `id`: A unique identifier (UUID), accessible as `$signal->id`.
-  - `title`: A descriptive title of the signal, accessible as `$signal->title`.
-  - `time`: A `DateTimeImmutable` object representing the creation time (in UTC), accessible as `$signal->time`.
-  - `details`: An array of additional information, accessible as `$signal->details`.
-
-- **Methods**:
-  - `jsonSerialize()`: Converts the signal to a JSON-compatible array.
-
-#### Signal Types
-- `Event`: Represents something that has happened (e.g., `UserLoggedIn`).
-- `Plan`: Proposes a future action (e.g., `PasswordChangePlan`).
-- `Inquiry`: Requests input or a decision.
-- `Message`: Shares information without expecting a response.
-- `Command`: Issues an authoritative instruction.
-
-#### Creating a Custom Signal
-```php
-use PhpRepos\Observer\Signals\Event;
-
-class UserLoggedIn extends Event {
-    public function __construct(string $id, string $title, $time, array $details) {
-        parent::__construct($id, $title, $time, $details);
-    }
-}
-
-$signal = new UserLoggedIn(
-    id: '123e4567-e89b-12d3-a456-426614174000',
-    title: 'UserLoggedIn',
-    time: new DateTimeImmutable('now', new DateTimeZone('UTC')),
-    details: ['user_id' => 1]
-);
-
-// Access properties directly
-echo $signal->id; // 123e4567-e89b-12d3-a456-426614174000
-echo $signal->title; // UserLoggedIn
-```
-
-Alternatively, use the `create` factory method:
-```php
-$signal = UserLoggedIn::create('UserLoggedIn', ['user_id' => 1]);
-echo $signal->id; // A generated UUID
-echo $signal->title; // UserLoggedIn
-```
-
-### Handlers
-
-Handlers are callables (e.g., closures, functions) registered to respond to specific signals. They are defined with typed parameters to specify which signals they handle. The `subscribe` function analyzes these parameters to determine matching signals.
-
-#### Example Handler
-```php
-use PhpRepos\Observer\Observer\subscribe;
-
-subscribe(function (UserLoggedIn $event) {
-    echo "User {$event->details['user_id']} logged in at {$event->time->format('Y-m-d H:i:s')}.\n";
-});
-```
-
-### Internal Signals
-
-The package emits internal signals to provide observability into its operations:
-- `HandlerExecution` (extends `Plan`): Emitted before a handler is executed.
-- `HandlerFound` (extends `Event`): Emitted after a handler is executed.
-- `NoHandlerFound` (extends `Event`): Emitted when no handlers match the dispatched signals.
-
-These signals can be used for logging or debugging, as shown in the [Logging Signals](#logging-signals-including-internal-signals) section.
-
-## Usage
-
-### Registering Handlers with `subscribe`
-
-The `subscribe` function registers one or more handlers to listen for signals. Each handler's parameters are analyzed to determine the signal types it can handle.
-
-#### Basic Example
-```php
-use PhpRepos\Observer\Observer\subscribe;
-use PhpRepos\Observer\Signals\Event;
-
-class UserLoggedIn extends Event {}
-
-subscribe(
-    function (UserLoggedIn $event) {
-        echo "User logged in: {$event->title}\n";
-    }
-);
-```
-
-#### Multiple Handlers
-You can register multiple handlers at once:
-```php
-subscribe(
-    function (UserLoggedIn $event) {
-        echo "Logging user login: {$event->title}\n";
-    },
-    function (UserLoggedIn $event) {
-        echo "Notifying admin: {$event->title}\n";
-    }
-);
-```
-
-#### Constraints
-- **At Least One Parameter**: Handlers must have at least one parameter, or an `ObserverException` is thrown.
-- **Typed Parameters**: Each parameter must have a type or a `SignalType` attribute, or an `ObserverException` is thrown.
-
-### Broadcasting Signals with `send`
-
-The `send` function dispatches signals to all matching handlers and returns an array of signals returned by those handlers.
-
-#### Example
-```php
-use PhpRepos\Observer\Observer\send;
-
-$signal = UserLoggedIn::create('UserLoggedIn', ['user_id' => 1]);
-$results = send($signal);
-// Outputs:
-// Logging user login: UserLoggedIn
-// Notifying admin: UserLoggedIn
-```
-
-#### Returning Signals
-Handlers can return signals, which are collected by `send`:
-```php
-subscribe(
-    function (UserLoggedIn $event) {
-        return Event::create('LoginLogged', ['user_id' => $event->details['user_id']]);
-    }
-);
-
-$results = send(UserLoggedIn::create('UserLoggedIn', ['user_id' => 1]));
-// $results contains one Event with title 'LoginLogged'
-```
-
-### Signal-Specific Functions
-
-The package provides helper functions for specific signal types:
-- `broadcast(Event $event)`: Broadcasts an event.
-- `propose(Plan $plan)`: Proposes a plan.
-- `ask(Inquiry $inquiry)`: Asks an inquiry.
-- `share(Message $message)`: Shares a message.
-- `order(Command $command)`: Orders a command.
-
-#### Example
-```php
-use PhpRepos\Observer\Observer\broadcast;
-use PhpRepos\Observer\Observer\propose;
-
-class PasswordChangePlan extends Plan {}
-
-subscribe(
-    function (UserLoggedIn $event) {
-        echo "User logged in: {$event->title}\n";
-    },
-    function (PasswordChangePlan $plan) {
-        echo "Plan proposed: {$plan->title}\n";
-    }
-);
-
-broadcast(UserLoggedIn::create('UserLoggedIn', ['user_id' => 1]));
-propose(PasswordChangePlan::create('PasswordChangePlan', ['user_id' => 1]));
-// Outputs:
-// User logged in: UserLoggedIn
-// Plan proposed: PasswordChangePlan
-```
-
-## Advanced Features
-
-### Union and Intersection Types
-
-Handlers can use union types (`|`) to match any of the specified types and intersection types (`&`) to match signals implementing all specified interfaces.
-
-#### Union Type Example
-```php
-subscribe(
-    function (UserLoggedIn|PasswordChangePlan $signal) {
-        echo "Signal received: {$signal->title}\n";
-    }
-);
-
-send(UserLoggedIn::create('UserLoggedIn')); // Executes
-send(PasswordChangePlan::create('PasswordChangePlan')); // Executes
-send(Message::create('Message')); // Does not execute
-```
-
-**Best Practice for Union Types**: While union types are supported, they increase the size of the internal lookup array that the Observer uses to match handlers, which can impact performance with many handlers. Instead, consider defining a parent class for the signals in the union and typing the parameter with that parent class. For example, if `UserLoggedIn` and `PasswordChangePlan` both extend a `UserAction` class, you can type the parameter as `UserAction` to reduce the lookup complexity.
-
-#### Intersection Type Example
-```php
-interface Loggable {}
-interface Trackable {}
-
-class CustomSignal extends Event implements Loggable, Trackable {
-    public function __construct(string $id, string $title, $time, array $details) {
-        parent::__construct($id, $title, $time, $details);
-    }
-}
-
-subscribe(
-    function (Loggable&Trackable $signal) {
-        echo "Custom signal: {$signal->title}\n";
-    }
-);
-
-send(CustomSignal::create('CustomSignal')); // Executes
-send(UserLoggedIn::create('UserLoggedIn')); // Does not execute
-```
-
-### Nullable Parameters and Default Values
-
-Handlers can use nullable parameters or parameters with default values to handle optional signals, but the first parameter must always be required.
-
-#### Example
-```php
-subscribe(
-    function (UserLoggedIn $event, ?Message $message = null) {
-        $message_title = $message ? $message->title : 'No message';
-        echo "Event: {$event->title}, Message: $message_title\n";
-    }
-);
-
-send(UserLoggedIn::create('UserLoggedIn')); // Outputs: Event: UserLoggedIn, Message: No message
-send(UserLoggedIn::create('UserLoggedIn'), Message::create('Greeting')); // Outputs: Event: UserLoggedIn, Message: Greeting
-send(PasswordChangePlan::create('PasswordChangePlan')); // Handler does not execute (no UserLoggedIn signal)
-```
-
-**Important Notes**:
-
-- **Behavior with Optional Signals**: When a handler has optional parameters (e.g., `?Message $message = null`), the Observer will attempt to execute the handler by satisfying the required signals (e.g., `UserLoggedIn $event`) and passing `null` for the optional ones. This means the handler may run with the minimum requirements (only the required signals). Developers should ensure this behavior aligns with their intent. In the example above, the handler executes when only a `UserLoggedIn` signal is provided, with `$message` set to `null`. If this is not desired, consider making the parameter required or adding logic to handle the `null` case appropriately.
-
-- **Unrelated Signals**: If the dispatched signal does not match the required parameters (e.g., sending a `PasswordChangePlan` when the handler requires a `UserLoggedIn`), the handler will not execute, as shown in the example above.
-
-- **Parameter Order Warning**: In PHP, having optional parameters before required parameters has been deprecated and will be removed in future versions. The Observer package does not support this pattern at all. Defining a handler with optional parameters before required ones (e.g., `function (?Message $message = null, UserLoggedIn $event)`) will lead to unexpected behavior, as the Observer's matching logic assumes required parameters are satisfied first. Always place required parameters before optional ones.
-
-### Custom Signal Types with `SignalType` Attribute
-
-The `SignalType` attribute allows specifying a signal type for untyped parameters or overriding the parameter type.
-
-#### Example with Local Signal
-```php
-use PhpRepos\Observer\Attributes\SignalType;
-
-subscribe(
-    function (#[SignalType(UserLoggedIn::class)] $signal) {
-        echo "Custom signal: {$signal->title}\n";
-    }
-);
-
-send(UserLoggedIn::create('UserLoggedIn')); // Executes
-send(PasswordChangePlan::create('PasswordChangePlan')); // Does not execute
-```
-
-#### Example with External Signal (Using String Class Name)
-For signals from external libraries or projects where you cannot directly reference the class (e.g., via `Class::class`), you can specify the fully qualified class name as a string in the `SignalType` attribute. This is particularly useful for integrating with events from other systems.
-
-```php
-use PhpRepos\Observer\Attributes\SignalType;
-
-subscribe(
-    function (#[SignalType('App\Events\ExternalEvent')] $signal) {
-        echo "External signal received: {$signal->title}\n";
-    }
-);
-
-// Assuming App\Events\ExternalEvent is a class from an external library
-// You would dispatch an instance of it like this:
-$external_event = new class('123e4567-e89b-12d3-a456-426614174000', 'ExternalEvent', new DateTimeImmutable(), []) extends Signal {
-    public function __construct(string $id, string $title, $time, array $details) {
-        parent::__construct($id, $title, $time, $details);
-    }
-};
-$external_event_class = new ReflectionClass($external_event);
-$external_event_class->setName('App\Events\ExternalEvent'); // Simulate the external class name
-
-send($external_event); // Outputs: External signal received: ExternalEvent
-```
-
-In this example, the `SignalType` attribute uses the string `'App\Events\ExternalEvent'` to match signals from an external library, allowing the handler to process them without requiring a direct class reference.
-
-## Error Handling in Handlers
-
-Handlers may throw exceptions during execution, and the `send` function propagates these exceptions, stopping further handler execution for the current signal dispatch.
-
-### Example: Handling Exceptions in Handlers
-```php
-subscribe(
-    function (UserLoggedIn $event) {
-        if (!isset($event->details['user_id'])) {
-            throw new \Exception('Missing user_id in UserLoggedIn signal.');
-        }
-        echo "User logged in: {$event->title}\n";
-    },
-    function (UserLoggedIn $event) {
-        echo "This handler will not execute if the first throws.\n";
-    }
-);
-
-try {
-    send(UserLoggedIn::create('UserLoggedIn', []));
-} catch (\Exception $e) {
-    echo "Error: {$e->getMessage()}\n";
-    // Handle the error, e.g., log it or notify an admin
-}
-// Outputs: Error: Missing user_id in UserLoggedIn signal.
-```
-
-### Best Practices
-- **Validate Signal Data**: Check the signal's `details` for required keys to avoid runtime errors.
-- **Graceful Degradation**: Return early or provide fallback behavior instead of throwing exceptions when possible.
-- **Centralized Error Handling**: Wrap `send` calls in a try-catch block to handle exceptions at a higher level.
-
-## Order of Multi-Signal Broadcasting
-
-When broadcasting multiple signals using `send`, the order of signals matters:
-- Handlers are matched based on the exact order of signal types in their parameter list.
-- If the signal order does not match, the handler will not execute.
-
-### Example: Signal Order Matters
-```php
-subscribe(
-    function (UserLoggedIn $event, PasswordChangePlan $plan) {
-        echo "Event: {$event->title}, Plan: {$plan->title}\n";
-    }
-);
-
-send(
-    UserLoggedIn::create('UserLoggedIn'),
-    PasswordChangePlan::create('PasswordChangePlan')
-);
-// Outputs: Event: UserLoggedIn, Plan: PasswordChangePlan
-
-send(
-    PasswordChangePlan::create('PasswordChangePlan'),
-    UserLoggedIn::create('UserLoggedIn')
-);
-// Does not execute (order mismatch)
-```
-
-### Broadcasting Multiple Signals
-When `send` receives multiple signals, it processes them recursively by dispatching each signal individually. This means:
-- Each signal is dispatched to all matching handlers.
-- The order of signals in the `send` call determines the order of individual dispatches.
-- Internal signals (`HandlerExecution`, `HandlerFound`) are emitted for each handler execution.
-
-#### Example: Recursive Dispatch
-```php
-subscribe(
-    function (Signal $signal) {
-        echo "Signal: {$signal->title}\n";
-    }
-);
-
-send(
-    UserLoggedIn::create('UserLoggedIn'),
-    PasswordChangePlan::create('PasswordChangePlan')
-);
-// Outputs:
-// Signal: UserLoggedIn
-// Signal: PasswordChangePlan
-```
-
-## Logging Signals (Including Internal Signals)
-
-To log all signals, including internal ones, you can register a global handler for the `Signal` type. Internal signals (`HandlerExecution`, `HandlerFound`, `NoHandlerFound`) extend `Signal`, so they will be captured as well.
-
-### Example: Logging All Signals
-```php
-use PhpRepos\Observer\Signals\Signal;
-use PhpRepos\Observer\Signals\Internals\HandlerExecution;
-use PhpRepos\Observer\Signals\Internals\HandlerFound;
-use PhpRepos\Observer\Signals\Internals\NoHandlerFound;
-
-// Register a global logger
-subscribe(
-    function (Signal $signal) {
-        $type = get_class($signal);
-        $title = $signal->title;
-        $details = json_encode($signal->details);
-        $time = $signal->time->format('Y-m-d H:i:s');
-        file_put_contents('signals.log', "[$time] $type: $title - Details: $details\n", FILE_APPEND);
-    }
-);
-
-// Register a regular handler
-subscribe(
-    function (UserLoggedIn $event) {
-        echo "User logged in: {$event->title}\n";
-    }
-);
-
-// Dispatch a signal
-send(UserLoggedIn::create('UserLoggedIn', ['user_id' => 1]));
-```
-
-#### Log Output (`signals.log`)
-```
-[2025-04-27 12:00:00] UserLoggedIn: UserLoggedIn - Details: {"user_id":1}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerExecution: Handler Execution Planned - Details: {"id":"1-1","signal_types":["UserLoggedIn"]}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerFound: Handler Found - Details: {"id":"1-1","signal_types":["UserLoggedIn"]}
-```
-
-### Filtering Internal Signals
-If you want to log only non-internal signals, you can filter them out:
-```php
-subscribe(
-    function (Signal $signal) {
-        if ($signal instanceof HandlerExecution || $signal instanceof HandlerFound || $signal instanceof NoHandlerFound) {
-            return; // Skip internal signals
-        }
-        $type = get_class($signal);
-        $title = $signal->title;
-        $details = json_encode($signal->details);
-        $time = $signal->time->format('Y-m-d H:i:s');
-        file_put_contents('signals.log', "[$time] $type: $title - Details: $details\n", FILE_APPEND);
-    }
-);
-```
-
-## Full Example
-
-Here’s a complete example demonstrating the package’s features, including handler registration, signal dispatching, error handling, and logging.
+Copy this into your `bootstrap.php` and see Observer in action:
 
 ```php
 <?php
+// bootstrap.php - Run this file to see Observer work
 
-use PhpRepos\Observer\Observer\subscribe;
-use PhpRepos\Observer\Observer\send;
-use PhpRepos\Observer\Signals\Event;
-use PhpRepos\Observer\Signals\Plan;
-use PhpRepos\Observer\Signals\Signal;
-use PhpRepos\Observer\Signals\Internals\HandlerExecution;
-use PhpRepos\Observer\Signals\Internals\HandlerFound;
-use PhpRepos\Observer\Signals\Internals\NoHandlerFound;
+use PhpRepos\Observer\API\{Event, Command};
+use function PhpRepos\Observer\API\Bus\{subscribe, send};
 
-// Define custom signals
-class UserLoggedIn extends Event {}
-class PasswordChangePlan extends Plan {}
+// 1. Define your signals (things that happen in your system)
+class UserRegistered extends Event {}
+class SendWelcomeEmail extends Command {}
 
-// Register a global logger for all signals
+// 2. Wire modules together (subscribe handlers at boot time)
 subscribe(
-    function (Signal $signal) {
-        $type = get_class($signal);
-        $title = $signal->title;
-        $details = json_encode($signal->details);
-        $time = $signal->time->format('Y-m-d H:i:s');
-        file_put_contents('signals.log', "[$time] $type: $title - Details: $details\n", FILE_APPEND);
+    // When user registers, request a welcome email
+    function (UserRegistered $event) {
+        echo "✓ User {$event->details['email']} registered\n";
+
+        // Return a command for the email module
+        return SendWelcomeEmail::create('Welcome Email', [
+            'to' => $event->details['email']
+        ]);
+    },
+
+    // Email module processes the command
+    function (SendWelcomeEmail $cmd) {
+        echo "✓ Sending welcome email to {$cmd->details['to']}\n";
+        // mail($cmd->details['to'], 'Welcome!', 'Thanks for joining!');
     }
 );
 
-// Register handlers with various features
-subscribe(
-    // Basic handler
-    function (UserLoggedIn $event) {
-        if (!isset($event->details['user_id'])) {
-            throw new \Exception('Missing user_id in UserLoggedIn signal.');
-        }
-        echo "User logged in: {$event->title} (User ID: {$event->details['user_id']})\n";
-        return Event::create('LoginLogged', ['user_id' => $event->details['user_id']]);
-    },
-    // Handler with multiple parameters
-    function (UserLoggedIn $event, ?PasswordChangePlan $plan = null) {
-        $plan_title = $plan ? $plan->title : 'No plan';
-        echo "Combined: Event {$event->title}, Plan: $plan_title\n";
-    },
-    // Handler for debugging internal signals
-    function (HandlerFound $event) {
-        echo "Handler executed: {$event->title} for signals " . json_encode($event->details['signal_types']) . "\n";
+// 3. Dispatch signals from anywhere in your application
+echo "Registering user...\n";
+send(UserRegistered::create('User Registered', [
+    'email' => 'user@example.com'
+]));
+
+echo "✓ Complete! User registered and email sent.\n";
+```
+
+**Run it**: `php bootstrap.php`
+
+**Output**:
+```
+Registering user...
+✓ User user@example.com registered
+✓ Sending welcome email to user@example.com
+✓ Complete! User registered and email sent.
+```
+
+**What just happened?**
+- Registration module **announced** a user registered (Event)
+- Email module **reacted** by returning a command
+- Command was **executed** - email sent
+- **Zero coupling** between registration and email modules!
+
+---
+
+## Understanding Observer
+
+### The Mental Model: A Home with Residents
+
+Think of your application as a **home** where each module is a **resident** (family member) operating independently:
+
+**Dad's Shopping Trip (Using All 5 Signal Types):**
+
+```php
+// 1. PLAN - "I want to go shopping" (intention announced)
+class GoingShoppingPlan extends Plan {}
+send(GoingShoppingPlan::create('Planning shopping trip', []));
+// Family hears the plan, prepares silently (add items to list)
+// No blocking - dad continues
+
+// 2. MESSAGE - "I'M GOING TO SHOP!" (broadcast announcement)
+class ShoppingAnnouncement extends Message {}
+send(ShoppingAnnouncement::create('Going shopping now!', []));
+// Everyone knows, reacts independently
+// Dad doesn't wait for responses
+
+// 3. EVENT - Door shuts (already happened - past tense)
+class DoorShut extends Event {}
+$commands = send(DoorShut::create('Dad left', []));
+// Too late to add items now!
+
+// 4. COMMAND - "Buy me ice cream!" (instruction)
+// Dad listens for commands (COSTLY - synchronization overhead)
+foreach ($commands as $cmd) {
+    if ($cmd instanceof BuyIceCream) {
+        // Dad pays attention, remembers request
     }
-);
-
-// Dispatch signals with error handling
-try {
-    $results = send(UserLoggedIn::create('UserLoggedIn', ['user_id' => 1]));
-    foreach ($results as $result) {
-        echo "Returned signal: {$result->title}\n";
-    }
-
-    send(
-        UserLoggedIn::create('UserLoggedIn', ['user_id' => 2]),
-        PasswordChangePlan::create('PasswordChangePlan', ['user_id' => 2])
-    );
-
-    // This will throw an exception
-    send(UserLoggedIn::create('UserLoggedIn', []));
-} catch (\Exception $e) {
-    echo "Error during signal dispatch: {$e->getMessage()}\n";
 }
+
+// 5. INQUIRY - "What time will you be back?" (question)
+class WhenWillYouReturn extends Inquiry {}
+send(WhenWillYouReturn::create('Expected return time?', []));
+// Dad can respond or not
 ```
 
-#### Output
-```
-User logged in: UserLoggedIn (User ID: 1)
-Handler executed: Handler Found for signals ["UserLoggedIn"]
-Returned signal: LoginLogged
-Combined: Event UserLoggedIn, Plan: No plan
-Handler executed: Handler Found for signals ["UserLoggedIn"]
-User logged in: UserLoggedIn (User ID: 2)
-Handler executed: Handler Found for signals ["UserLoggedIn"]
-Combined: Event UserLoggedIn, Plan: PasswordChangePlan
-Handler executed: Handler Found for signals ["UserLoggedIn","PasswordChangePlan"]
-Error during signal dispatch: Missing user_id in UserLoggedIn signal.
+### Core Principles
+
+1. **Autonomous Modules**: Like family members, each module works independently
+2. **Fire-and-Forget**: Broadcast signals without waiting (like dad announcing)
+3. **Boot-Time Wiring**: Subscribe once during startup (like "shopping list on fridge" convention)
+4. **Synchronization is Costly**: Returning signals = paying attention (use sparingly)
+5. **No Priority Needed**: Why would shopping have priority over laundry? Modules are independent!
+
+### What Observer IS
+
+✅ **Message passing** between autonomous modules
+✅ **Module integration** at boot time
+✅ **Cross-cutting concerns** (logging, audit) without coupling
+✅ **Decoupled architecture** without direct dependencies
+
+### What Observer IS NOT
+
+❌ **Request-response system** (use direct calls)
+❌ **Workflow orchestration** (use workflow engine)
+❌ **Ad-hoc events**
+❌ **Replacement for good architecture**
+
+---
+
+## Common Use Cases
+
+### 1. Module Wiring (Decoupling)
+
+**Problem**: Payment module needs to update invoice, but they shouldn't depend on each other.
+
+**Solution**: Wire them through signals at boot time.
+
+```php
+// bootstrap.php
+
+class PaymentReceived extends Event {}
+class MarkInvoicePaid extends Command {}
+
+subscribe(
+    // Payment module announces payment (fire-and-forget)
+    function (PaymentReceived $payment) {
+        echo "Payment received for invoice {$payment->details['invoice_id']}\n";
+
+        // Request invoice update (return command)
+        return MarkInvoicePaid::create('Mark Paid', [
+            'invoice_id' => $payment->details['invoice_id']
+        ]);
+    },
+
+    // Invoice module processes the command
+    function (MarkInvoicePaid $cmd) {
+        updateInvoiceStatus($cmd->details['invoice_id'], 'paid');
+        echo "Invoice {$cmd->details['invoice_id']} marked as paid\n";
+    }
+);
+
+// In payment processing code (anywhere)
+send(PaymentReceived::create('Payment Received', ['invoice_id' => 'INV-001']));
 ```
 
-#### Log File (`signals.log`)
+### 2. Cross-Cutting Concerns (Logging, Audit)
+
+**Problem**: Need to log all events without modifying every module.
+
+**Solution**: One handler that listens to all events.
+
+```php
+// bootstrap.php
+
+use PhpRepos\Observer\API\{Event, Signal};
+
+// Log ALL events (cross-cutting concern)
+subscribe(function (Event $event) {
+    file_put_contents('audit.log',
+        date('Y-m-d H:i:s') . " - {$event->title}\n",
+        FILE_APPEND
+    );
+});
+
+// Or log EVERYTHING (including commands, plans, etc.)
+subscribe(function (Signal $signal) {
+    echo "[{$signal->time->format('H:i:s')}] " . get_class($signal) . "\n";
+});
+
+// Now every signal in the entire application is automatically logged!
 ```
-[2025-04-27 12:00:00] UserLoggedIn: UserLoggedIn - Details: {"user_id":1}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerExecution: Handler Execution Planned - Details: {"id":"1-1","signal_types":["UserLoggedIn"]}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerFound: Handler Found - Details: {"id":"1-1","signal_types":["UserLoggedIn"]}
-[2025-04-27 12:00:00] UserLoggedIn: UserLoggedIn - Details: {"user_id":2}
-[2025-04-27 12:00:00] PasswordChangePlan: PasswordChangePlan - Details: {"user_id":2}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerExecution: Handler Execution Planned - Details: {"id":"1-2","signal_types":["UserLoggedIn"]}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerFound: Handler Found - Details: {"id":"1-2","signal_types":["UserLoggedIn"]}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerExecution: Handler Execution Planned - Details: {"id":"2-3","signal_types":["UserLoggedIn","PasswordChangePlan"]}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerFound: Handler Found - Details: {"id":"2-3","signal_types":["UserLoggedIn","PasswordChangePlan"]}
-[2025-04-27 12:00:00] UserLoggedIn: UserLoggedIn - Details: {}
-[2025-04-27 12:00:00] PhpRepos\Observer\Signals\Internals\HandlerExecution: Handler Execution Planned - Details: {"id":"1-1","signal_types":["UserLoggedIn"]}
+
+### 3. UI Layer Integration
+
+**Problem**: Application needs different output based on UI type (CLI vs Web).
+
+**Solution**: UI layer decides how to present signals.
+
+```php
+// bootstrap.php - Application dispatches signals from anywhere
+
+class OrderPlaced extends Event {}
+class PaymentProcessed extends Event {}
+
+// CLI Application
+if (php_sapi_name() === 'cli') {
+    subscribe(function (Signal $signal) {
+        // Output to console
+        echo "[{$signal->time->format('H:i:s')}] {$signal->title}\n";
+    });
+}
+
+// Web Application
+if (isset($_SERVER['HTTP_HOST'])) {
+    subscribe(function (Signal $signal) {
+        // Send through WebSocket to browser
+        $websocket->send(json_encode([
+            'type' => get_class($signal),
+            'title' => $signal->title,
+            'time' => $signal->time->format('c'),
+            'details' => $signal->details
+        ]));
+    });
+}
+
+// Application code (UI-agnostic)
+send(OrderPlaced::create('Order Placed', ['order_id' => 'ORD-001']));
+send(PaymentProcessed::create('Payment Complete', ['amount' => 99.99]));
+
+// Same signals, different presentation!
+```
+
+### 4. Real-World: Payment System Down
+
+**Scenario**: Payment gateway is down - stop processing new orders.
+
+```php
+// Signals
+class PaymentGatewayDown extends Event {}
+class OrderPlaced extends Event {}
+class ProcessOrder extends Command {}
+class StopOrderProcessing extends Command {}
+
+// State management
+$processing_enabled = true;
+
+subscribe(
+    // When gateway goes down, stop processing
+    function (PaymentGatewayDown $event) use (&$processing_enabled) {
+        $processing_enabled = false;
+        echo "⚠ Payment gateway down - orders paused\n";
+
+        return StopOrderProcessing::create('Stop Processing', [
+            'reason' => 'Payment gateway unavailable'
+        ]);
+    },
+
+    // Stop processing handler
+    function (StopOrderProcessing $cmd) {
+        notifyAdmins($cmd->details['reason']);
+        pauseOrderQueue();
+    },
+
+    // Order handler checks if processing is enabled
+    function (OrderPlaced $order) use (&$processing_enabled) {
+        if (!$processing_enabled) {
+            echo "✗ Order {$order->details['order_id']} queued (processing paused)\n";
+            queueOrder($order->details['order_id']);
+            return;
+        }
+
+        return ProcessOrder::create('Process Order', [
+            'order_id' => $order->details['order_id']
+        ]);
+    }
+);
+
+// Simulate: gateway goes down
+send(PaymentGatewayDown::create('Gateway Timeout', ['error' => 'Connection timeout']));
+
+// Try to place order
+send(OrderPlaced::create('Order Placed', ['order_id' => 'ORD-123']));
+// Output: ✗ Order ORD-123 queued (processing paused)
+```
+
+### 5. Cascading Actions (Use Sparingly!)
+
+**When**: Critical operations that need tracking (emails, confirmations)
+**Cost**: Synchronization overhead - only use when justified
+
+```php
+class OrderPlaced extends Event {}
+class SendConfirmation extends Command {}
+class UpdateInventory extends Command {}
+
+subscribe(
+    // RETURN SIGNAL: Email is critical for customer
+    function (OrderPlaced $order) {
+        return SendConfirmation::create('Order Confirmation', [
+            'email' => $order->details['customer_email'],
+            'order_id' => $order->details['order_id']
+        ]);
+    },
+
+    // FIRE-AND-FORGET: Inventory update is independent
+    function (OrderPlaced $order) {
+        updateInventory($order->details['items']);
+        // No return = autonomous operation
+    },
+
+    // Process returned commands
+    function (SendConfirmation $cmd) {
+        mail($cmd->details['email'], 'Order Confirmed', '...');
+    }
+);
 ```
 
 ---
+
+## Advanced Features
+
+### Union Types (Handle Multiple Signals)
+
+```php
+class UserLoggedIn extends Event {}
+class UserLoggedOut extends Event {}
+class PasswordChanged extends Event {}
+
+// Handle ANY of these events
+subscribe(function (UserLoggedIn|UserLoggedOut|PasswordChanged $event) {
+    auditLog($event);
+});
+```
+
+**Performance Tip**: Use parent classes instead for better performance:
+
+```php
+abstract class UserSecurityEvent extends Event {}
+class UserLoggedIn extends UserSecurityEvent {}
+class UserLoggedOut extends UserSecurityEvent {}
+
+// More efficient (one registry entry instead of three)
+subscribe(function (UserSecurityEvent $event) {
+    auditLog($event);
+});
+```
+
+### Optional Parameters
+
+```php
+class UserLoggedIn extends Event {}
+class SessionCreated extends Event {}
+
+// Handler works with or without session
+subscribe(function (UserLoggedIn $login, ?SessionCreated $session = null) {
+    if ($session) {
+        linkSessionToUser($login, $session);
+    } else {
+        createNewSession($login);
+    }
+});
+
+// Both work:
+send($login);                  // Session is null
+send($login, $session);        // Both provided
+```
+
+### Multi-Signal Dispatch (Advanced!)
+
+**When**: Complex business rules requiring coordination
+**Example**: Only notify when BOTH payment AND shipping succeed
+
+```php
+class PaymentProcessed extends Event {}
+class ShippingConfirmed extends Event {}
+class SendCompleteNotification extends Command {}
+
+// Handler ONLY executes when BOTH signals dispatched together
+subscribe(function (
+    PaymentProcessed $payment,
+    ShippingConfirmed $shipping
+) {
+    // Both conditions met!
+    if ($payment->details['order_id'] === $shipping->details['order_id']) {
+        return SendCompleteNotification::create('Order Complete', [
+            'order_id' => $payment->details['order_id']
+        ]);
+    }
+});
+
+// Dispatch both together (rare use case)
+send($paymentEvent, $shippingEvent);
+```
+
+**Performance Note**: Multi-signal is slower than single-signal. Use only when you need transaction-like coordination.
+
+### Intersection Types
+
+```php
+interface Loggable {}
+interface Auditable {}
+
+class SecurityEvent extends Event implements Loggable, Auditable {}
+
+// Only handles signals that implement BOTH interfaces
+subscribe(function (Loggable&Auditable $signal) {
+    logAndAudit($signal);
+});
+```
+
+### SignalType Attribute
+
+```php
+use PhpRepos\Observer\API\SignalType;
+
+// Specify type without type hint
+subscribe(function (#[SignalType(UserLoggedIn::class)] $event) {
+    handleLogin($event);
+});
+```
+
+---
+
+## Architecture & Philosophy
+
+### Design Goals
+
+1. **Prevent "Event Hell"**: No dynamic subscribe/unsubscribe prevents spaghetti code
+2. **Autonomous Modules**: Like Unix philosophy - each does one thing well
+3. **Traceable Flow**: Boot-time wiring makes architecture visible
+4. **Actor Model for PHP**: Message-passing between independent actors
+
+### Why No Handler Priority?
+
+Because modules are **autonomous** - they don't coordinate. Why would payment processing have priority over logging? They're independent systems that work in parallel, like family members doing separate tasks.
+
+If you need ordering, you're likely trying to orchestrate - use a workflow engine instead.
+
+---
+
+## API Reference
+
+### Signal Types
+
+All signals extend `Signal` class with these properties:
+- `id` (string): UUID v4
+- `title` (string): Descriptive name
+- `time` (DateTimeImmutable): Creation timestamp (UTC)
+- `details` (array): Context data
+
+**Creating Signals:**
+
+```php
+// Static create method (recommended)
+$event = UserLoggedIn::create('User Login', ['user_id' => 123]);
+
+// Factory functions
+use function PhpRepos\Observer\API\Signals\event;
+$event = event('User Login', ['user_id' => 123]);
+
+// Direct instantiation
+$event = new UserLoggedIn(uuid(), 'User Login', now(), ['user_id' => 123]);
+```
+
+### Bus Functions
+
+**subscribe(callable ...$handlers): void**
+- Registers handlers at boot time
+- Handlers must have typed parameters
+- Called when matching signals dispatched
+
+**send(Signal ...$signals): array**
+- Dispatches signals to matching handlers
+- Returns array of signals returned by handlers
+- Main dispatch function
+
+**Convenience functions:**
+- `broadcast(Event $event): array`
+- `order(Command $command): array`
+- `propose(Plan $plan): array`
+- `ask(Inquiry $inquiry): array`
+- `share(Message $message): array`
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture details and development guidelines.
+
+**Start with architecture** to understand the philosophy, then practical contribution steps.
+
+---
+
+## License
+
+MIT License - See [LICENSE](LICENSE) file
+
+---
+
+## Links
+
+- [GitHub](https://github.com/php-repos/observer)
+- [phpkg](https://phpkg.com)
+- [Logger Package](https://github.com/php-repos/logger)
