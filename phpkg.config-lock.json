@@ -1,20 +1,20 @@
 {
     "version": 2,
-    "checksum": "5c790b1eba1b81b92288098eb5c2dddfd350176f51d446547c29dec06e0db76a",
+    "checksum": "816124acbbdf56efefb0906d531597e1f19b1529de1005ceb60e21cec470b3fd",
     "packages": {
         "https:\/\/github.com\/php-repos\/logger.git": {
             "owner": "php-repos",
             "repo": "logger",
-            "version": "v2.0.0",
-            "hash": "057576d4f4d8de269cc2083b7fb656d17ac9bf0a",
-            "checksum": "df8a0939415b5fa87cf6bd4c8b0c7019c9dfb83aa36f603d727f5dfa139270cb"
+            "version": "v2.0.1",
+            "hash": "65bb575f7f14107e06ebe6b3f57e9f7478adbff2",
+            "checksum": "6bf72b3d85b73f29927eaf6b2c9fe7b33c8d7ad51eb6a3e1d7240c8ecfad6b26"
         },
         "https:\/\/github.com\/ramsey\/uuid.git": {
             "owner": "ramsey",
             "repo": "uuid",
-            "version": "4.7.6",
-            "hash": "91039bc1faa45ba123c4328958e620d382ec7088",
-            "checksum": "32417812414e3929c1e0942ab136fa8e2bae1461e25af75218d809021690d958"
+            "version": "4.9.2",
+            "hash": "8429c78ca35a09f27565311b98101e2826affde0",
+            "checksum": "1c0787fe189e42ebaeab54d744c1c5a4cb691f200d9e1fde58780fa6316ff2fc"
         },
         "https:\/\/github.com\/brick\/math.git": {
             "owner": "brick",
