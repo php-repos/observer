@@ -6,13 +6,11 @@
     "excludes": [],
     "entry-points": [],
     "executables": [],
-    "import-file": "phpkg.imports.php",
     "packages-directory": "Packages",
+    "import-file": "phpkg.imports.php",
     "packages": {
-        "https:\/\/github.com\/ramsey\/uuid.git": "4.7.6",
-        "https:\/\/github.com\/php-repos\/datatype.git": "v4.0.0"
+        "https:\/\/github.com\/ramsey\/uuid.git": "4.9.2",
+        "https:\/\/github.com\/php-repos\/logger.git": "v2.0.1"
     },
-    "aliases": {
-        "datatype": "https:\/\/github.com\/php-repos\/datatype.git"
-    }
+    "aliases": []
 }

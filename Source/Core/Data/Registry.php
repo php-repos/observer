@@ -1,6 +1,6 @@
 <?php
 
-namespace PhpRepos\Observer;
+namespace PhpRepos\Observer\Core\Data;
 
 /**
  * Manages the storage and retrieval of registered handlers in the observer system.
@@ -32,6 +32,7 @@ class Registry
      *
      * @param callable $handler The handler to register.
      * @param array ...$conditions The conditions under which the handler should be invoked, based on signal types.
+     * @return void
      */
     public static function register(callable $handler, array ...$conditions): void
     {
@@ -40,6 +41,8 @@ class Registry
 
     /**
      * Resets the registry by clearing all registered handlers.
+     *
+     * @return void
      */
     public static function reset(): void
     {

@@ -12,16 +12,26 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        php: [8.2, 8.3, 8.4]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        php: [8.3, 8.4, 8.5]
+        exclude:
+          - os: windows-latest
+            php: 8.3
+          - os: windows-latest
+            php: 8.4
 
     name: P${{ matrix.php }} - ${{ matrix.os }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      - name: Add SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -30,19 +40,73 @@ jobs:
           extensions: curl, mbstring, zip
           coverage: none
 
-      - name: Install phpkg
-        run: bash -c "$(curl -fsSL https://raw.github.com/php-repos/phpkg-installation/master/install.sh)"
+      - name: Install phpkg (Unix)
+        if: runner.os != 'Windows'
+        run: | 
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/php-repos/phpkg-installation/master/install.sh)"
+          echo "PATH=\$PATH:$HOME/.phpkg" >> $GITHUB_PATH
 
-      - name: Set Credentials
-        run: ~/.phpkg/phpkg credential github.com ${{ secrets.GITHUB_TOKEN }}
+      - name: Test installation (Unix)
+        if: runner.os != 'Windows'
+        run: phpkg version
 
-      - name: Install
-        run: ~/.phpkg/phpkg install
-
-      - name: Build
-        run: ~/.phpkg/phpkg build production
-
-      - name: Execute tests
+      - name: Install phpkg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          cd builds/production
-          ~/.phpkg/phpkg run https://github.com/php-repos/test-runner.git
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/php-repos/phpkg-installation/master/install.ps1" -OutFile install.ps1 -UseBasicParsing
+          powershell -ExecutionPolicy Bypass -File install.ps1
+          $phpkgPath = "$env:USERPROFILE\.phpkg"
+          if (-not (Test-Path $phpkgPath)) {
+            Write-Error "phpkg installation directory not found at $phpkgPath"
+            exit 1
+          }
+          echo "$phpkgPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Verify phpkg is available
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+          phpkg version
+
+      - name: Set Credentials for main PHPKG (Unix)
+        if: runner.os != 'Windows'
+        run: phpkg credential github.com ${{ secrets.PHPKG_GITHUB_TOKEN }}
+
+      - name: Set Credentials for main PHPKG (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+          phpkg credential github.com ${{ secrets.PHPKG_GITHUB_TOKEN }}
+
+      - name: Install dependencies (Unix)
+        if: runner.os != 'Windows'
+        run: phpkg install
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+          phpkg install
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: phpkg build
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+          phpkg build
+
+      - name: Execute tests (Unix)
+        if: runner.os != 'Windows'
+        run: cd build && phpkg run test-runner run
+
+      - name: Execute tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+          cd build
+          phpkg run test-runner run
